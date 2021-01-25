@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 from pathlib import Path
+from podracer.docker_config import DockerConfig
 from podracer.ostree import rev_parse
 
 
@@ -12,16 +13,18 @@ def run(ref):
   workdir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
   checkout = workdir.joinpath(sha)
-  docker_config = checkout.joinpath('docker-config.json')
+  config_path = checkout.joinpath('docker-config.json')
   rootfs = checkout.joinpath('rootfs')
 
-  if checkout.is_dir() and not (docker_config.is_file() and rootfs.is_dir()):
+  if checkout.is_dir() and not (config_path.is_file() and rootfs.is_dir()):
     shutil.rmtree(str(checkout))
 
   if not checkout.is_dir():
     subprocess.run(['ostree', 'checkout', sha, str(checkout)], check=True)
 
   print(str(checkout))
+  podman_args = DockerConfig(config_path).podman_args()
+  print(podman_args)
 
 
 def main(argv=sys.argv):
