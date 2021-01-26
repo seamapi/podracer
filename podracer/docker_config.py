@@ -1,6 +1,6 @@
 import json
 
-from podracer.env import unpack_env_array
+from podracer.env import unpack_env
 
 class DockerConfig:
   def __init__(self, config_path):
@@ -9,7 +9,7 @@ class DockerConfig:
 
     self.env = {}
     if 'Env' in self.config:
-      self.env = unpack_env_array(self.config['Env'])
+      self.env = unpack_env(self.config['Env'])
 
     self.working_dir = self._get_config_scalar('WorkingDir')
     self.user = self._get_config_scalar('User')

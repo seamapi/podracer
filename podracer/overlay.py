@@ -20,6 +20,6 @@ def podracer_overlay(name, rootfs):
     subprocess.run(['mount', '-t', 'overlay', 'overlay', mount_options, str(merged)], check=True)
 
     try:
-      yield merged
+      yield rundir, merged
     finally:
       subprocess.run(['umount', str(merged)])
