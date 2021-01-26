@@ -40,6 +40,9 @@ def main(argv=sys.argv[1:]):
   if args.name is None:
     args.name = f"{args.ref.replace('/', '-')}-{str(os.getpid())}"
 
+  if args.env is None:
+    args.env = {}
+  else:
   args.env = unpack_env_array(args.env)
 
   run(args.name, args.ref, args.env, args.command)
