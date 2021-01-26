@@ -1,5 +1,7 @@
 import json
 
+from podracer.env import unpack_env_array
+
 class DockerConfig:
   def __init__(self, config_path):
     with open(config_path) as io:
@@ -7,23 +9,32 @@ class DockerConfig:
 
     self.env = {}
     if 'Env' in self.config:
-      for kv in self.config['Env']:
-        key, value = kv.split('=', 1)
-        self.env[key] = value
+      self.env = unpack_env_array(self.config['Env'])
 
     self.working_dir = self._get_config_scalar('WorkingDir')
     self.user = self._get_config_scalar('User')
-    self.entrypoint = self._get_config_scalar('Entrypoint')
+    self.entrypoint = self._get_config_list('Entrypoint')
+    self.command = self._get_config_list('Cmd')
 
 
   def _get_config_scalar(self, key):
     if (key in self.config) and len(self.config[key]) > 0:
       return self.config[key]
-    else:
-      return None
+    return None
 
 
-  def podman_args(self):
+  def _get_config_list(self, key):
+    if (key in self.config):
+      if isinstance(self.config[key], list):
+        return self.config[key]
+      else:
+        value = self._get_config_scalar(key)
+        if value is not None:
+          return [value]
+    return []
+
+
+  def podman_args(self, rootfs):
     args = []
 
     if self.working_dir is not None:
@@ -32,10 +43,15 @@ class DockerConfig:
     if self.user is not None:
       args += ['-u', self.user]
 
-    if self.entrypoint is not None:
-      args += ['--entrypoint', self.entrypoint]
-
     for key, value in self.env.items():
       args += ['-e', f'{key}={value}']
+
+    if len(self.entrypoint) > 0:
+      args += ['--entrypoint', self.entrypoint[0]]
+      command = self.entrypoint[1:] + self.command
+    else:
+      command = self.command
+
+    args += ['--rootfs', str(rootfs)] + command
 
     return args
