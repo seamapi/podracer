@@ -32,26 +32,3 @@ class DockerConfig:
         if value is not None:
           return [value]
     return []
-
-
-  def podman_args(self, rootfs):
-    args = []
-
-    if self.working_dir is not None:
-      args += ['-w', self.working_dir]
-
-    if self.user is not None:
-      args += ['-u', self.user]
-
-    for key, value in self.env.items():
-      args += ['-e', f'{key}={value}']
-
-    if len(self.entrypoint) > 0:
-      args += ['--entrypoint', self.entrypoint[0]]
-      command = self.entrypoint[1:] + self.command
-    else:
-      command = self.command
-
-    args += ['--rootfs', str(rootfs)] + command
-
-    return args
