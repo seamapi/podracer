@@ -1,6 +1,29 @@
 # podracer
 
 podracer is a wrapper around [podman](https://podman.io/) to launch a container stored in an [ostree](https://ostreedev.github.io/ostree/) repository.
+
+## Usage
+
+```text
+podracer-run [-h] [-n NAME] [-e KEY=VALUE] [--env-file FILE] [-v VOLUME]
+              OSTREE_REF [CMD [CMD ...]]
+
+Run a container from an ostree commit
+
+positional arguments:
+  OSTREE_REF            ostree commit for container
+  CMD                   command to run in container
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -n NAME, --name NAME  name to assign to container
+  -e KEY=VALUE, --env KEY=VALUE
+                        add or override a container environment variable
+  --env-file FILE       read environment variables from a file
+  -v VOLUME, --volume VOLUME
+                        bind mount a volume into the container
+```
+
 ## Copyright
 
 Copyright (C) 2021 Halcyon Labs
