@@ -102,11 +102,10 @@ def create_tarball(image, metadata):
   return tarball
 
 
-def ostree_commit(ref, tarball, metadata):
+def ostree_commit(tarball, metadata):
   return capture_output(
-    'ostree', 'commit',
+    'ostree', 'commit', '--orphan',
     f"--tree=tar={tarball.name}",
-    f"--branch={ref}",
     f"--subject=podracer repacked {metadata['source']} at {metadata['imported']}",
     f"--add-metadata-string=source={metadata['source']}",
     f"--add-metadata-string=imported={metadata['imported']}",
@@ -134,10 +133,11 @@ def repack(ref, image, arch, variant=None, sign_by=None):
   tarball = create_tarball(with_digest, metadata)
 
   try:
-    commit = ostree_commit(ref, tarball, metadata)
-    sys.stderr.write(f"{with_digest} imported to {ref}\n")
+    commit = ostree_commit(tarball, metadata)
     if sign_by is not None:
       subprocess.run(['ostree', 'gpg-sign', commit, sign_by], check=True)
+    subprocess.run(['ostree', 'commit', f"--branch={ref}", f"--tree=ref={commit}"], check=True)
+    sys.stderr.write(f"{with_digest} imported to {ref}\n")
     print(commit)
   finally:
     os.unlink(tarball.name)
