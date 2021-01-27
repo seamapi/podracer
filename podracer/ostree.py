@@ -1,13 +1,13 @@
 import subprocess
 
 from pathlib import Path
+from podracer.capture import capture_output
 
-CHECKOUTROOT = Path('/var/lib/podracer/checkouts')
+CHECKOUTROOT = Path('/var/lib/podracer/ostree')
 
 
 def ostree_rev_parse(ref):
-  parsed = subprocess.run(['ostree', 'rev-parse', ref], check=True, capture_output=True, text=True)
-  return parsed.stdout.strip()
+  return capture_output('ostree', 'rev-parse', ref)
 
 
 def ostree_checkout(ref):
