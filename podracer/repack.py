@@ -114,15 +114,17 @@ def ostree_commit(ref, tarball, metadata):
   )
 
 
-def repack(ref, image, arch, variant=None):
+def repack(ref, image, arch, variant=None, sign_by=None):
   metadata = registry_manifest(image, arch, variant)
   with_digest = f"{image.rsplit(':', 1)[0]}@{metadata['digest']}"
 
+
   if ostree_digest(ref) == metadata['digest']:
-    print(f"{ref} already contains {with_digest}")
+    sys.stderr.write(f"{ref} already contains {with_digest}\n")
+    print(ostree_rev_parse(ref))
     return 0
 
-  subprocess.run([RUNTIME, 'pull', with_digest], check=True)
+  subprocess.run([RUNTIME, 'pull', '--quiet', with_digest], check=True)
   inspect = capture_json(RUNTIME, 'image', 'inspect', with_digest)
 
   metadata["source"] = image
@@ -133,7 +135,10 @@ def repack(ref, image, arch, variant=None):
 
   try:
     commit = ostree_commit(ref, tarball, metadata)
-    print(f"{with_digest} imported to {ref} as {commit}")
+    sys.stderr.write(f"{with_digest} imported to {ref}\n")
+    if sign_by is not None:
+      subprocess.run(['ostree', 'gpg-sign', commit, sign_by], check=True)
+    print(commit)
   finally:
     os.unlink(tarball.name)
 
@@ -144,7 +149,7 @@ def main(argv=sys.argv[1:]):
   parser.add_argument('image', metavar='IMAGE', help='image to import')
   parser.add_argument('--arch', metavar='ARCH', help='architecture to import')
   parser.add_argument('--variant', metavar='VARIANT', help='variant to import')
-
+  parser.add_argument('--sign-by', metavar='KEYID', help='sign commit with GPG key')
   args = parser.parse_args(argv)
 
   if args.arch is None:
@@ -156,7 +161,7 @@ def main(argv=sys.argv[1:]):
   if args.variant is None:
     args.variant = os.getenv('PODRACER_VARIANT')
 
-  repack(args.ref, args.image, args.arch, args.variant)
+  repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
 
 
 if __name__ == "__main__":
