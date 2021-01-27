@@ -2,21 +2,15 @@ import argparse
 import datetime
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
 
 from pathlib import Path
+from podracer.container import RUNTIME
+from podracer.ostree import ostree_rev_parse
 from podracer.capture import capture_output, capture_json
-
-if shutil.which('podman') is not None:
-  RUNTIME = 'podman'
-elif shutil.which('docker') is not None:
-  RUNTIME = 'docker'
-else:
-  raise RuntimeError("Couldn't find podman or docker in path")
 
 
 def registry_manifest(image, arch, variant=None):
