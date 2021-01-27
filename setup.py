@@ -9,6 +9,7 @@ setuptools.setup(
   url="https://github.com/hello-seam/podracer",
   packages=setuptools.find_packages(),
   python_requires='>=3.8',
+  license='AGPL-3.0-or-later',
   entry_points = {
     'console_scripts': [ 'podracer-run=podracer.run:main' ]
   }
