@@ -89,7 +89,6 @@ def create_tarball(image, metadata):
 
     # Write the metadata
     with tempfile.TemporaryFile(mode='w+') as tmp:
-      print(tmp)
       json.dump(metadata, tmp, indent=2)
       tmp.seek(0)
 
