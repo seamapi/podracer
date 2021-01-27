@@ -114,7 +114,7 @@ def ostree_commit(ref, tarball, metadata):
     'ostree', 'commit',
     f"--tree=tar={tarball.name}",
     f"--branch={ref}",
-    f"--subject=Imported {metadata['source']} at {metadata['imported']}",
+    f"--subject=podracer repacked {metadata['source']} at {metadata['imported']}",
     f"--add-metadata-string=source={metadata['source']}",
     f"--add-metadata-string=imported={metadata['imported']}",
     f"--add-metadata-string=digest={metadata['digest']}"
