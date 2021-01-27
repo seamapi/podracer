@@ -93,7 +93,7 @@ def create_tarball(image, metadata):
       json.dump(metadata, tmp, indent=2)
       tmp.seek(0)
 
-      info = tarfile.TarInfo('./podracer.json')
+      info = tarfile.TarInfo('./.podracer.json')
       info.uid = 0
       info.gid = 0
       info.size = os.stat(tmp.fileno()).st_size
