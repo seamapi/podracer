@@ -1,0 +1,7 @@
+services:
+  podracer:
+    build: .
+    command: [ '/bin/bash' ]
+    volumes:
+      - ${HOME}/.docker/config.json:/root/.docker/config.json:ro
+      - /var/run/docker.sock:/var/run/docker.sock
