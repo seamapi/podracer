@@ -48,7 +48,7 @@ def registry_manifest(image, arch, variant=None):
 
 def ostree_digest(ref):
   try:
-    return capture_json('ostree', 'cat', ref, '.podracer.json')
+    return capture_json('ostree', 'cat', ref, '.podracer.json')['digest']
   except subprocess.CalledProcessError:
     return None
 
