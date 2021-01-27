@@ -52,12 +52,6 @@ def create_tarball(image, metadata):
   tarball = tempfile.NamedTemporaryFile(suffix='.tar', delete=False)
   tree = tarfile.open(None, 'w', tarball)
 
-  # Create a root entry - ostree will reject it otherwise
-  root = tarfile.TarInfo('./')
-  root.mode = 0o755
-  root.type = tarfile.DIRTYPE
-  tree.addfile(root)
-
   try:
     # Save the image and open the archive
     archivefile = tempfile.TemporaryFile()
@@ -75,7 +69,6 @@ def create_tarball(image, metadata):
       layer = tarfile.open(None, 'r', archive.extractfile(name))
       # Copy each file in the layer into the tree
       for member in layer.getmembers():
-        member.name = f"./{member.name}"
         if member.size > 0:
           tree.addfile(member, layer.extractfile(member))
         else:
@@ -86,9 +79,7 @@ def create_tarball(image, metadata):
       json.dump(metadata, tmp, indent=2)
       tmp.seek(0)
 
-      info = tarfile.TarInfo('./.podracer.json')
-      info.uid = 0
-      info.gid = 0
+      info = tarfile.TarInfo('.podracer.json')
       info.size = os.stat(tmp.fileno()).st_size
       tree.addfile(info, tmp.buffer)
 
@@ -102,9 +93,7 @@ def create_tarball(image, metadata):
   return tarball
 
 
-def ostree_commit(tarball, metadata):
-  return capture_output(
-    'ostree', 'commit', '--orphan',
+    'ostree', 'commit', '--tar-autocreate-parents',
     f"--tree=tar={tarball.name}",
     f"--subject=podracer repacked {metadata['source']} at {metadata['imported']}",
     f"--add-metadata-string=source={metadata['source']}",
