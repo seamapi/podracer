@@ -1,14 +1,17 @@
-FROM python:3.8-slim
+FROM ubuntu:20.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      apt-transport-https ca-certificates curl gnupg ostree && \
-    curl -fsSL https://download.docker.com/linux/debian/gpg | apt-key add - && \
-    echo "deb [arch=amd64] https://download.docker.com/linux/debian buster stable" > /etc/apt/sources.list.d/docker.list && \
+      apt-transport-https ca-certificates curl gnupg ostree python3 python3-setuptools
+
+RUN echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" > /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
+    curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key | apt-key add - && \
     apt-get update && \
-    apt-get install -y --no-install-recommends docker-ce-cli
+    apt-get install -y --no-install-recommends podman
+
+COPY containers.conf /etc/containers/containers.conf
 
 RUN mkdir -p /sysroot/ostree && \
     ln -sf /sysroot/ostree /ostree && \

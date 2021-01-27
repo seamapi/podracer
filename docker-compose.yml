@@ -1,7 +1,23 @@
 services:
+
   podracer:
     build: .
+    command: [ '/bin/bash' ]
+    privileged: true
+    volumes:
+      - ${HOME}/.docker/config.json:/root/.docker/config.json:ro
+      - ostree:/sysroot/ostree/repo
+      - storage:/var/lib/containers/storage
+
+  docker:
+    build:
+      context: .
+      dockerfile: Dockerfile.docker
     command: [ '/bin/bash' ]
     volumes:
       - ${HOME}/.docker/config.json:/root/.docker/config.json:ro
       - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  ostree:
+  storage:
