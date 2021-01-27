@@ -1,6 +1,5 @@
 import os
 import signal
-import logging
 
 from contextlib import contextmanager
 
