@@ -1,5 +1,6 @@
 # podracer
 
+podracer is a wrapper around [podman](https://podman.io/) to launch a container stored in an [ostree](https://ostreedev.github.io/ostree/) repository.
 ## Copyright
 
 Copyright (C) 2021 Halcyon Labs
