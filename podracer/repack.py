@@ -142,7 +142,7 @@ def repack(ref, image, arch, variant=None):
     commit = ostree_commit(ref, tarball, metadata)
     print(f"{with_digest} imported to {ref} as {commit}")
   finally:
-    os.unlink(tarball)
+    os.unlink(tarball.name)
 
 
 def main(argv=sys.argv[1:]):
