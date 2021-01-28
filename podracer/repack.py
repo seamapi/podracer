@@ -158,6 +158,18 @@ def main(argv=sys.argv[1:]):
 
   if args.repo is not None:
     os.environ['OSTREE_REPO'] = args.repo
+  elif 'OSTREE_REPO' in os.environ:
+    args.repo = os.environ['OSTREE_REPO']
+
+  try:
+    capture_output('ostree', 'refs', suppress_stderr=True)
+  except subprocess.CalledProcessError:
+    if args.repo is not None:
+      sys.stderr.write(f"Initializing ostree repo in {args.repo}\n")
+      subprocess.run(['ostree', f"--repo={args.repo}", 'init', '--mode=archive-z2'])
+    else:
+      raise RuntimeError("Couldn't read ostree repo; try setting OSTREE_REPO or passing --repo.")
+
 
   repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
 
