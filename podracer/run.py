@@ -1,10 +1,11 @@
 import argparse
+import json
 import os
 import signal
 import subprocess
 import sys
 
-from podracer.docker_config import DockerConfig
+from pathlib import Path
 from podracer.env import unpack_env
 from podracer.ostree import ostree_checkout
 from podracer.overlay import podracer_overlay
@@ -12,54 +13,95 @@ from podracer.signals import forward_signals
 
 FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
 
-
 class Runner:
-  def __init__(self, name, ref, env={}, volumes=[], networks=[], command=[]):
-    self.name = name
-    self.volumes = volumes
-    self.networks = networks
-    self.checkout = ostree_checkout(ref)
-    self.docker_config = DockerConfig(self.checkout.joinpath('docker-config.json'))
-    self.child = None
+  def __init__(self, rootfs, *command, env = {}, name = None, daemon = False, passthru_args = []):
+    if rootfs.startswith('ostree:'):
+      ref = rootfs.split(':', 1)[1]
+      rootfs = ostree_checkout(ref)
 
-    if env is not None:
-      self.docker_config.env.update(env)
+      if name is None:
+        name = f"{ref.replace('/', '-')}-{str(os.getpid())}"
+
+    rootfs = Path(rootfs)
+
+    if not rootfs.is_dir():
+      raise RuntimeError(f"rootfs {rootfs} is not a directory")
+
+    if name is None:
+      name = f"{rootfs.name}-{str(os.getpid())}"
+
+    self.name = name
+    self.rootfs = rootfs
+    self.daemon = daemon
+    self.passthru_args = passthru_args
+    self.working_dir = None
+    self.user = None
+    self.env = {"PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+    self.entrypoint = []
+    self.command = []
+
+    self.load_config()
 
     if len(command) > 0:
-      self.docker_config.command = command
+      self.command = command
+    elif len(self.command) < 1:
+      if os.access(rootfs.joinpath('bin/bash'), os.X_OK):
+        self.command = ['/bin/bash']
+      elif os.access(rootfs.joinpath('bin/sh'), os.X_OK):
+        self.command = ['/bin/sh']
+
+    self.env.update(env)
+    self.child = None
+
+
+  def load_config(self):
+    config_path = self.rootfs.joinpath('.podracer.json')
+
+    if not config_path.is_file():
+      return
+
+    with open(config_path) as io:
+      config = json.load(io)["config"]
+
+    if 'Env' in config:
+      self.env = unpack_env(config['Env'])
+
+    if ('WorkingDir' in config) and (len(config['WorkingDir']) > 0):
+      self.working_dir = config['WorkingDir']
+
+    if ('User' in config) and (len(config['User']) > 0):
+      self.user = config['User']
+
+    if ('Entrypoint' in config) and (config['Entrypoint'] is not None):
+      self.entrypoint = config['Entrypoint']
+
+    if ('Cmd' in config) and (config['Cmd'] is not None):
+      self.command = config['Cmd']
 
 
   def podman_args(self, rootfs):
-    args = [
-      '--rm',
-      '--name', self.name,
-      '--replace',
-      '--conmon-pidfile', f"/run/container-{self.name}.pid",
-      '--cidfile', f"/run/container-{self.name}.ctr-id",
-      '--cgroups=no-conmon'
-    ]
+    args = ['--rm', '--name', self.name, '--replace']
 
-    if self.docker_config.working_dir is not None:
-      args += ['-w', self.docker_config.working_dir]
+    if self.daemon:
+      args += [
+        '--conmon-pidfile', f"/run/container-{self.name}.pid",
+        '--cidfile', f"/run/container-{self.name}.ctr-id",
+        '--cgroups=no-conmon'
+      ]
 
-    if self.docker_config.user is not None:
-      args += ['-u', self.docker_config.user]
+    if self.working_dir is not None:
+      args += ['-w', self.working_dir]
 
-    for vol in self.volumes:
-      args += ['-v', vol]
+    if self.user is not None:
+      args += ['-u', self.user]
 
-    for net in self.networks:
-      args += ['--network', net]
-
-    if len(self.docker_config.entrypoint) > 0:
-      args += ['--entrypoint', self.docker_config.entrypoint[0]]
-      command = self.docker_config.entrypoint[1:] + self.docker_config.command
+    if len(self.entrypoint) > 0:
+      args += ['--entrypoint', self.entrypoint[0]]
+      command = self.entrypoint[1:] + self.command
     else:
-      command = self.docker_config.command
+      command = self.command
 
-    args += ['--rootfs', str(rootfs)] + command
-
-    return args
+    return args + self.passthru_args + ['--rootfs', str(rootfs)] + list(command)
 
 
   def send_signal(self, signum):
@@ -69,21 +111,20 @@ class Runner:
 
 
   def run(self):
-    with podracer_overlay(self.name, self.checkout.joinpath('rootfs')) as (rundir, rootfs):
+    with podracer_overlay(self.name, self.rootfs) as (rundir, rootfs):
       env_file = rundir.joinpath('env')
       with open(env_file, 'w') as io:
-        for key, value in self.docker_config.env.items():
+        for key, value in self.env.items():
           io.write(f"{key}={value}\n")
 
       with forward_signals(self.send_signal, *FORWARD_SIGNALS):
         self.child = subprocess.Popen(['podman', 'run', '--env-file', str(env_file)] + self.podman_args(rootfs))
         self.child.wait()
-        return self.child.returncode
 
 
 def main(argv=sys.argv[1:]):
-  parser = argparse.ArgumentParser(description='Run a container from an ostree commit')
-  parser.add_argument('ref', metavar='OSTREE_REF', nargs=1, help='ostree commit for container')
+  parser = argparse.ArgumentParser(description='Run a container from a rootfs or an ostree commit')
+  parser.add_argument('rootfs', metavar='ROOTFS', nargs=1, help='path to rootfs OR "ostree:<OSTREE COMMIT>"')
   parser.add_argument('command', metavar='CMD', nargs='*', help='command to run in container')
   parser.add_argument('-n', '--name', metavar='NAME', help='name to assign to container')
   parser.add_argument('-e', '--env', metavar='KEY=VALUE', action='append', help='add or override a container environment variable')
@@ -93,13 +134,8 @@ def main(argv=sys.argv[1:]):
 
   args = parser.parse_args(argv)
 
-  if len(args.ref) != 1:
-    raise RuntimeError('Something went wrong parsing ref')
-
-  args.ref = args.ref[0]
-
-  if args.name is None:
-    args.name = f"{args.ref.replace('/', '-')}-{str(os.getpid())}"
+  if len(args.rootfs) != 1:
+    raise RuntimeError('Something went wrong parsing rootfs')
 
   if args.env is None:
     args.env = {}
@@ -116,13 +152,21 @@ def main(argv=sys.argv[1:]):
     file_env.update(args.env)
     args.env = file_env
 
-  if args.volume is None:
-    args.volume = []
+  passthru_args = []
+
+  if args.volume is not None:
+    for vol in args.volume:
+      passthru_args += ['-v', vol]
+
+  if args.network is not None:
+    for net in args.network:
+      passthru_args += ['--network', net]
 
   if args.network is None:
     args.network = []
 
-  return Runner(args.name, args.ref, args.env, args.volume, args.network, args.command).run()
+  Runner(args.rootfs[0], *args.command, env=args.env, name=args.name, passthru_args=passthru_args).run()
+  return 0
 
 
 if __name__ == "__main__":
