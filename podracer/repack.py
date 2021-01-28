@@ -117,7 +117,7 @@ def repack(ref, image, arch, variant=None, sign_by=None):
   if ostree_digest(ref) == metadata['digest']:
     sys.stderr.write(f"{ref} already contains {with_digest}\n")
     print(ostree_rev_parse(ref))
-    return 0
+    return
 
   capture_output(RUNTIME, 'pull', '--quiet', with_digest)
   inspect = capture_json(RUNTIME, 'image', 'inspect', with_digest)
@@ -172,6 +172,7 @@ def main(argv=sys.argv[1:]):
 
 
   repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
+  return 0
 
 
 if __name__ == "__main__":
