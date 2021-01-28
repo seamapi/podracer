@@ -55,7 +55,7 @@ def create_tarball(image, metadata):
   try:
     # Save the image and open the archive
     archivefile = tempfile.TemporaryFile()
-    subprocess.run([RUNTIME, 'save', image], check=True, stdout=archivefile)
+    subprocess.run([RUNTIME, 'save', image], check=True, stdout=archivefile, stderr=subprocess.PIPE)
     archivefile.seek(0)
     archive = tarfile.open(None, 'r', archivefile)
 
@@ -119,7 +119,7 @@ def repack(ref, image, arch, variant=None, sign_by=None):
     print(ostree_rev_parse(ref))
     return 0
 
-  subprocess.run([RUNTIME, 'pull', '--quiet', with_digest], check=True)
+  capture_output(RUNTIME, 'pull', '--quiet', with_digest)
   inspect = capture_json(RUNTIME, 'image', 'inspect', with_digest)
 
   metadata["source"] = image
