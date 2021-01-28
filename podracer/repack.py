@@ -114,7 +114,6 @@ def repack(ref, image, arch, variant=None, sign_by=None):
   metadata = registry_manifest(image, arch, variant)
   with_digest = f"{image.rsplit(':', 1)[0]}@{metadata['digest']}"
 
-
   if ostree_digest(ref) == metadata['digest']:
     sys.stderr.write(f"{ref} already contains {with_digest}\n")
     print(ostree_rev_parse(ref))
@@ -147,13 +146,14 @@ def main(argv=sys.argv[1:]):
   args = parser.parse_args(argv)
 
   if args.arch is None:
-    args.arch = os.getenv('PODRACER_ARCH')
-
-  if args.arch is None:
-    raise RuntimeError('--arch not specified and PODRACER_ARCH not set')
+    if 'PODRACER_ARCH' in os.environ and len(os.environ['PODRACER_ARCH']) > 0:
+      args.arch = os.getenv('PODRACER_ARCH')
+    else:
+      raise RuntimeError('--arch not specified and PODRACER_ARCH not set')
 
   if args.variant is None:
-    args.variant = os.getenv('PODRACER_VARIANT')
+    if 'PODRACER_VARIANT' in os.environ and len(os.environ['PODRACER_VARIANT']) > 0:
+      args.variant = os.getenv('PODRACER_VARIANT')
 
   repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
 
