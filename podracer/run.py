@@ -92,6 +92,7 @@ class Runner:
 
 
   def run(self, overlay=True, detach=False):
+    PODRACER_RUNDIR.mkdir(mode=0o755, parents=True, exist_ok=True)
     rundir = Path(tempfile.mkdtemp(dir=PODRACER_RUNDIR))
 
     try:
