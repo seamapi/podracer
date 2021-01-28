@@ -18,7 +18,7 @@ FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
 
 
 class Runner:
-  def __init__(self, rootfs, *command, env={}, passthru_args=[]):
+  def __init__(self, rootfs, *command, entrypoint=None, env={}, passthru_args=[]):
     rootfs = Path(rootfs)
     if not rootfs.is_dir():
       raise RuntimeError(f"rootfs {rootfs} is not a directory")
@@ -32,6 +32,8 @@ class Runner:
     self.command = []
 
     self.load_config()
+    if entrypoint is not None:
+      self.entrypoint = entrypoint
 
     if len(command) > 0:
       self.command = list(command)
@@ -129,6 +131,7 @@ def main(argv=sys.argv[1:]):
   parser.add_argument('--cgroups', metavar='enabled|disabled|no-conmon|split', help='control container cgroup configuration (default "enabled")')
   parser.add_argument('--conmon-pidfile', metavar='PATH', help='path to the file that will receive the PID of conmon')
   parser.add_argument('-d', '--detach', action='store_true', help='run container in background and print container ID')
+  parser.add_argument('--entrypoint', metavar='ENTRYPOINT', help='overwrite the default ENTRYPOINT of the image')
   parser.add_argument('-e', '--env', metavar='KEY=VALUE', action='append', help='add or override a container environment variable')
   parser.add_argument('--env-file', metavar='FILE', action='append', help='read environment variables from a file')
   parser.add_argument('-i', '--interactive', action='store_true', help='keep STDIN open even if not attached')
@@ -181,12 +184,19 @@ def main(argv=sys.argv[1:]):
     if value:
       passthru_args.append(f"--{attr}")
 
+  # Handle overridden entrypoint
+  if args.entrypoint is not None:
+    if args.entrypoint.startswith('[') and args.entrypoint.endswith(']'):
+      args.entrypoint = json.loads(args.entrypoint)
+    else:
+      args.entrypoint = [args.entrypoint]
+
   # Sanity check
   if args.detach:
     if args.tty or args.interactive:
       raise RuntimeError("--detach is incompatible with --tty and --interactive")
 
-  runner = Runner(rootfs, *args.command, env=env, passthru_args=passthru_args)
+  runner = Runner(rootfs, *args.command, entrypoint=args.entrypoint, env=env, passthru_args=passthru_args)
   return runner.run(detach=args.detach)
 
 
