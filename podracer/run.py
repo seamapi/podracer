@@ -162,9 +162,6 @@ def main(argv=sys.argv[1:]):
     for net in args.network:
       passthru_args += ['--network', net]
 
-  if args.network is None:
-    args.network = []
-
   Runner(args.rootfs[0], *args.command, env=args.env, name=args.name, passthru_args=passthru_args).run()
   return 0
 
