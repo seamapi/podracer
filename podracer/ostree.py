@@ -1,9 +1,8 @@
 import subprocess
 
 from pathlib import Path
+from podracer.paths import PODRACER_LIBDIR
 from podracer.capture import capture_output
-
-CHECKOUTROOT = Path('/var/lib/podracer/ostree')
 
 
 def ostree_rev_parse(ref):
@@ -13,9 +12,10 @@ def ostree_rev_parse(ref):
 def ostree_checkout(ref):
   sha = ostree_rev_parse(ref)
 
-  CHECKOUTROOT.mkdir(mode=0o700, parents=True, exist_ok=True)
-  checkout = CHECKOUTROOT.joinpath(sha)
+  checkout_root = PODRACER_LIBDIR.joinpath('ostree')
+  checkout_root.mkdir(mode=0o755, parents=True, exist_ok=True)
 
+  checkout = checkout_root.joinpath(sha)
   if not checkout.is_dir():
     subprocess.run(['ostree', 'checkout', sha, str(checkout)], check=True)
 
