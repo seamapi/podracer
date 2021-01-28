@@ -7,7 +7,7 @@ CHECKOUTROOT = Path('/var/lib/podracer/ostree')
 
 
 def ostree_rev_parse(ref):
-  return capture_output('ostree', 'rev-parse', ref)
+  return capture_output('ostree', 'rev-parse', ref, suppress_stderr=True)
 
 
 def ostree_checkout(ref):
