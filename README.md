@@ -23,6 +23,7 @@ positional arguments:
 
 optional arguments:
   -h, --help         show this help message and exit
+  --repo OSTREE      ostree repo to import to
   --arch ARCH        architecture to import
   --variant VARIANT  variant to import
   --sign-by KEYID    sign commit with GPG key
