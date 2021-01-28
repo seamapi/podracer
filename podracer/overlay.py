@@ -1,25 +1,32 @@
+import json
+import os
+import shutil
 import subprocess
+import tempfile
 
-from contextlib import contextmanager
-from podracer.rundir import podracer_rundir
+from pathlib import Path
+from podracer.poststop import generate_hook
+
+PODRACER_RUNDIR = Path(os.environ.get('PODRACER_RUNDIR', '/run/podracer'))
 
 
-@contextmanager
-def podracer_overlay(name, rootfs):
-  with podracer_rundir(name) as rundir:
-    upperdir = rundir.joinpath('upperdir')
-    upperdir.mkdir(mode=0o755, parents=True, exist_ok=True)
+def podracer_overlay(rundir, rootfs):
+  upperdir = rundir.joinpath('upperdir')
+  upperdir.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-    workdir = rundir.joinpath('workdir')
-    workdir.mkdir(mode=0o755, parents=True, exist_ok=True)
+  workdir = rundir.joinpath('workdir')
+  workdir.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-    merged = rundir.joinpath('merged')
-    merged.mkdir(mode=0o755, parents=True, exist_ok=True)
+  overlay = rundir.joinpath('rootfs')
+  overlay.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-    mount_options = f'-olowerdir={rootfs},upperdir={upperdir},workdir={workdir}'
-    subprocess.run(['mount', '-t', 'overlay', 'overlay', mount_options, str(merged)], check=True)
+  hooks = rundir.joinpath('hooks')
+  hooks.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-    try:
-      yield rundir, merged
-    finally:
-      subprocess.run(['umount', str(merged)])
+  with open(hooks.joinpath('cleanup.json'), 'w') as io:
+    json.dump(generate_hook(rundir), io)
+
+  mount_options = f'-olowerdir={rootfs},upperdir={upperdir},workdir={workdir}'
+  subprocess.run(['mount', '-t', 'overlay', 'overlay', mount_options, str(overlay)], check=True)
+
+  return overlay, hooks

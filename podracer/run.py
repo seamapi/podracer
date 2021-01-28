@@ -4,14 +4,18 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 
 from pathlib import Path
 from podracer.env import unpack_env
+from podracer.paths import PODRACER_RUNDIR
 from podracer.ostree import ostree_checkout
 from podracer.overlay import podracer_overlay
+from podracer.poststop import poststop
 from podracer.signals import forward_signals
 
 FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
+
 
 class Runner:
   def __init__(self, rootfs, *command, env = {}, name = None, daemon = False, passthru_args = []):
@@ -43,7 +47,7 @@ class Runner:
     self.load_config()
 
     if len(command) > 0:
-      self.command = command
+      self.command = list(command)
     elif len(self.command) < 1:
       if os.access(rootfs.joinpath('bin/bash'), os.X_OK):
         self.command = ['/bin/bash']
@@ -79,7 +83,7 @@ class Runner:
       self.command = config['Cmd']
 
 
-  def podman_args(self, rootfs):
+  def podman_args(self):
     args = ['--rm', '--name', self.name, '--replace']
 
     if self.daemon:
@@ -96,12 +100,9 @@ class Runner:
       args += ['-u', self.user]
 
     if len(self.entrypoint) > 0:
-      args += ['--entrypoint', self.entrypoint[0]]
-      command = self.entrypoint[1:] + self.command
-    else:
-      command = self.command
+      args += ['--entrypoint', json.dumps(self.entrypoint)]
 
-    return args + self.passthru_args + ['--rootfs', str(rootfs)] + list(command)
+    return args + self.passthru_args + ['--rootfs', str(self.rootfs)] + self.command
 
 
   def send_signal(self, signum):
@@ -110,16 +111,32 @@ class Runner:
     return self.child.send_signal(signum)
 
 
-  def run(self):
-    with podracer_overlay(self.name, self.rootfs) as (rundir, rootfs):
+  def run(self, overlay=True, detach=False):
+    rundir = Path(tempfile.mkdtemp(dir=PODRACER_RUNDIR))
+
+    try:
+      if overlay:
+        self.rootfs, hooks = podracer_overlay(rundir, self.rootfs)
+        self.passthru_args += ['--hooks-dir', hooks]
+
+      if detach:
+        self.passthru_args.append('-d')
+
       env_file = rundir.joinpath('env')
       with open(env_file, 'w') as io:
         for key, value in self.env.items():
           io.write(f"{key}={value}\n")
 
+      argv = ['podman', 'run', '--env-file', str(env_file)] + self.podman_args()
+
       with forward_signals(self.send_signal, *FORWARD_SIGNALS):
-        self.child = subprocess.Popen(['podman', 'run', '--env-file', str(env_file)] + self.podman_args(rootfs))
+        self.child = subprocess.Popen(argv)
         self.child.wait()
+    finally:
+      if rundir.exists() and not detach:
+        poststop(rundir)
+
+    return self.child.returncode
 
 
 def main(argv=sys.argv[1:]):
@@ -131,7 +148,8 @@ def main(argv=sys.argv[1:]):
   parser.add_argument('--env-file', metavar='FILE', action='append', help='read environment variables from a file')
   parser.add_argument('-v', '--volume', metavar='VOLUME', action='append', help='bind mount a volume into the container')
   parser.add_argument('--network', metavar='NETWORK', action='append', help='connect the container to a network')
-
+  parser.add_argument('-t', '--tty', action='store_true', help='allocate a pseudo-TTY for container')
+  parser.add_argument('-i', '--interactive', action='store_true', help='keep STDIN open even if not attached')
   args = parser.parse_args(argv)
 
   if len(args.rootfs) != 1:
@@ -154,13 +172,17 @@ def main(argv=sys.argv[1:]):
 
   passthru_args = []
 
-  if args.volume is not None:
-    for vol in args.volume:
-      passthru_args += ['-v', vol]
+  for attr in ['volume', 'network']:
+    values = getattr(args, attr)
+    if values is not None:
+      for value in values:
+        passthru_args += [f"--{attr}", value]
 
-  if args.network is not None:
-    for net in args.network:
-      passthru_args += ['--network', net]
+  if args.tty:
+    passthru_args.append('-t')
+
+  if args.interactive:
+    passthru_args.append('-i')
 
   Runner(args.rootfs[0], *args.command, env=args.env, name=args.name, passthru_args=passthru_args).run()
   return 0
