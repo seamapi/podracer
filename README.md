@@ -1,17 +1,42 @@
 # podracer
 
-podracer is a wrapper around [podman](https://podman.io/) to launch a container stored in an [ostree](https://ostreedev.github.io/ostree/) repository.
+podracer includes a tool to import a container from a registry into an [ostree](https://ostreedev.github.io/ostree/) repository, and wrapper around [podman](https://podman.io/) to launch a container stored in a ostree repository (or just a directory, if you only want a glorified [chroot(1)](https://man7.org/linux/man-pages/man1/chroot.1.html).)
+
+You may want to use this if you want to use an ostree repository for container distribution instead of a registry. The benefits of doing so include:
+
+- Instead of needing to run a container registry, ostree repositories can be served a simple static HTTP server, and work well when put behind a CDN such as Cloudflare.
+- Instead of having to transfer an entire layer when only a few files have changed, ostree updates work at the level of individual files.
+- ostree only stores one copy of any particular version of a file and creates hard links to it where it is needed; if multiple filesystems with an identical file are stored in the same repository, they will all reference the same copy of the file, saving disk space. Additional savings can be achieved if the host operating system is also managed by ostree, which will allow containers to share files with the host as well as with each other.
 
 ## Usage
 
-```text
-podracer-run [-h] [-n NAME] [-e KEY=VALUE] [--env-file FILE] [-v VOLUME]
-              OSTREE_REF [CMD [CMD ...]]
+### `podracer-repack`
 
-Run a container from an ostree commit
+```text
+podracer-repack [-h] [--arch ARCH] [--variant VARIANT] [--sign-by KEYID] BRANCH IMAGE
+
+Import a container into ostree from a registry
 
 positional arguments:
-  OSTREE_REF            ostree commit for container
+  BRANCH             ostree branch to commit to
+  IMAGE              image to import
+
+optional arguments:
+  -h, --help         show this help message and exit
+  --arch ARCH        architecture to import
+  --variant VARIANT  variant to import
+  --sign-by KEYID    sign commit with GPG key
+```
+
+### `podracer-run`
+
+```text
+podracer-run [-h] [-n NAME] [-e KEY=VALUE] [--env-file FILE] [-v VOLUME] [--network NETWORK] ROOTFS [CMD [CMD ...]]
+
+Run a container from a rootfs or an ostree commit
+
+positional arguments:
+  ROOTFS                path to rootfs OR "ostree:<OSTREE COMMIT>"
   CMD                   command to run in container
 
 optional arguments:
@@ -22,6 +47,7 @@ optional arguments:
   --env-file FILE       read environment variables from a file
   -v VOLUME, --volume VOLUME
                         bind mount a volume into the container
+  --network NETWORK     connect the container to a network```
 ```
 
 ## Copyright
