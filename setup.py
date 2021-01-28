@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
   name="podracer",
-  version="0.0.1",
+  version="0.9.0",
   author="Seam",
   author_email="hello@getseam.com",
   description="Tool to run repacked containers",

@@ -31,23 +31,36 @@ optional arguments:
 ### `podracer-run`
 
 ```text
-podracer-run [-h] [-n NAME] [-e KEY=VALUE] [--env-file FILE] [-v VOLUME] [--network NETWORK] ROOTFS [CMD [CMD ...]]
+podracer-run [-h] [--cidfile PATH] [--cgroups enabled|disabled|no-conmon|split] [--conmon-pidfile PATH] [-d] [-e KEY=VALUE] [--env-file FILE] [-i] [-n NAME] [--network NETWORK] [--no-ostree] [--replace] [--rm] [-t]
+              [-v VOLUME]
+              ROOTFS [CMD [CMD ...]]
 
 Run a container from a rootfs or an ostree commit
 
 positional arguments:
-  ROOTFS                path to rootfs OR "ostree:<OSTREE COMMIT>"
+  ROOTFS                ostree reference of rootfs, or path if --no-ostree given
   CMD                   command to run in container
 
 optional arguments:
   -h, --help            show this help message and exit
-  -n NAME, --name NAME  name to assign to container
+  --cidfile PATH        write the container ID to the file
+  --cgroups enabled|disabled|no-conmon|split
+                        control container cgroup configuration (default "enabled")
+  --conmon-pidfile PATH
+                        path to the file that will receive the PID of conmon
+  -d, --detach          run container in background and print container ID
   -e KEY=VALUE, --env KEY=VALUE
                         add or override a container environment variable
   --env-file FILE       read environment variables from a file
+  -i, --interactive     keep STDIN open even if not attached
+  -n NAME, --name NAME  name to assign to container
+  --network NETWORK     connect the container to a network
+  --no-ostree           interpret ROOTFS as a path
+  --replace             if a container with the same name exists, replace it
+  --rm                  remove container after exit
+  -t, --tty             allocate a pseudo-TTY for container
   -v VOLUME, --volume VOLUME
                         bind mount a volume into the container
-  --network NETWORK     connect the container to a network```
 ```
 
 ## Copyright

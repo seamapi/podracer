@@ -18,25 +18,12 @@ FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
 
 
 class Runner:
-  def __init__(self, rootfs, *command, env = {}, name = None, daemon = False, passthru_args = []):
-    if rootfs.startswith('ostree:'):
-      ref = rootfs.split(':', 1)[1]
-      rootfs = ostree_checkout(ref)
-
-      if name is None:
-        name = f"{ref.replace('/', '-')}-{str(os.getpid())}"
-
+  def __init__(self, rootfs, *command, env={}, passthru_args=[]):
     rootfs = Path(rootfs)
-
     if not rootfs.is_dir():
       raise RuntimeError(f"rootfs {rootfs} is not a directory")
 
-    if name is None:
-      name = f"{rootfs.name}-{str(os.getpid())}"
-
-    self.name = name
     self.rootfs = rootfs
-    self.daemon = daemon
     self.passthru_args = passthru_args
     self.working_dir = None
     self.user = None
@@ -84,14 +71,7 @@ class Runner:
 
 
   def podman_args(self):
-    args = ['--rm', '--name', self.name, '--replace']
-
-    if self.daemon:
-      args += [
-        '--conmon-pidfile', f"/run/container-{self.name}.pid",
-        '--cidfile', f"/run/container-{self.name}.ctr-id",
-        '--cgroups=no-conmon'
-      ]
+    args = []
 
     if self.working_dir is not None:
       args += ['-w', self.working_dir]
@@ -120,7 +100,7 @@ class Runner:
         self.passthru_args += ['--hooks-dir', hooks]
 
       if detach:
-        self.passthru_args.append('-d')
+        self.passthru_args.append('--detach')
 
       env_file = rundir.joinpath('env')
       with open(env_file, 'w') as io:
@@ -133,59 +113,80 @@ class Runner:
         self.child = subprocess.Popen(argv)
         self.child.wait()
     finally:
-      if rundir.exists() and not detach:
+      if rundir.exists() and ((self.child.returncode != 0) or (not detach)):
         poststop(rundir)
 
     return self.child.returncode
 
 
 def main(argv=sys.argv[1:]):
+  # Not quite as many arguments as Thanksgiving
   parser = argparse.ArgumentParser(description='Run a container from a rootfs or an ostree commit')
-  parser.add_argument('rootfs', metavar='ROOTFS', nargs=1, help='path to rootfs OR "ostree:<OSTREE COMMIT>"')
+  parser.add_argument('rootfs', metavar='ROOTFS', nargs=1, help='ostree reference of rootfs, or path if --no-ostree given')
   parser.add_argument('command', metavar='CMD', nargs='*', help='command to run in container')
-  parser.add_argument('-n', '--name', metavar='NAME', help='name to assign to container')
+  parser.add_argument('--cidfile', metavar='PATH', help='write the container ID to the file')
+  parser.add_argument('--cgroups', metavar='enabled|disabled|no-conmon|split', help='control container cgroup configuration (default "enabled")')
+  parser.add_argument('--conmon-pidfile', metavar='PATH', help='path to the file that will receive the PID of conmon')
+  parser.add_argument('-d', '--detach', action='store_true', help='run container in background and print container ID')
   parser.add_argument('-e', '--env', metavar='KEY=VALUE', action='append', help='add or override a container environment variable')
   parser.add_argument('--env-file', metavar='FILE', action='append', help='read environment variables from a file')
-  parser.add_argument('-v', '--volume', metavar='VOLUME', action='append', help='bind mount a volume into the container')
-  parser.add_argument('--network', metavar='NETWORK', action='append', help='connect the container to a network')
-  parser.add_argument('-t', '--tty', action='store_true', help='allocate a pseudo-TTY for container')
   parser.add_argument('-i', '--interactive', action='store_true', help='keep STDIN open even if not attached')
+  parser.add_argument('-n', '--name', metavar='NAME', help='name to assign to container')
+  parser.add_argument('--network', metavar='NETWORK', action='append', help='connect the container to a network')
+  parser.add_argument('--no-ostree', action='store_true', help='interpret ROOTFS as a path')
+  parser.add_argument('--replace', action='store_true', help='if a container with the same name exists, replace it')
+  parser.add_argument('--rm', action='store_true', help='remove container after exit')
+  parser.add_argument('-t', '--tty', action='store_true', help='allocate a pseudo-TTY for container')
+  parser.add_argument('-v', '--volume', metavar='VOLUME', action='append', help='bind mount a volume into the container')
   args = parser.parse_args(argv)
 
-  if len(args.rootfs) != 1:
-    raise RuntimeError('Something went wrong parsing rootfs')
+  # Checkout the ostree, if needed
+  rootfs = args.rootfs[0]
+  if not args.no_ostree:
+    rootfs = ostree_checkout(rootfs)
 
-  if args.env is None:
-    args.env = {}
-  else:
-    args.env = unpack_env(args.env)
+  # Build the environment
+  env = {}
 
+  # First, --env-files
   if args.env_file is not None:
-    file_env = {}
     for env_file in args.env_file:
       with open(env_file) as io:
-        file_env.update(unpack_env(io))
+        env.update(unpack_env(io))
 
-    # -e vars override --env-files
-    file_env.update(args.env)
-    args.env = file_env
+  # Then, --env
+  if args.env is not None:
+    env.update(unpack_env(args.env))
 
+  # We don't really the rest of the aguments, we just pass them to podman
   passthru_args = []
 
-  for attr in ['volume', 'network']:
+  # Reproduce list arguments
+  for attr in ['network', 'volume']:
     values = getattr(args, attr)
     if values is not None:
       for value in values:
         passthru_args += [f"--{attr}", value]
 
-  if args.tty:
-    passthru_args.append('-t')
+  # Reproduce string arguments
+  for attr in ['cidfile', 'cgroups', 'conmon_pidfile', 'name']:
+    value = getattr(args, attr)
+    if value is not None:
+      passthru_args += [f"--{attr.replace('_', '-')}", value]
 
-  if args.interactive:
-    passthru_args.append('-i')
+  # Reproduce boolean arguments
+  for attr in ['interactive', 'replace', 'rm', 'tty']:
+    value = getattr(args, attr)
+    if value:
+      passthru_args.append(f"--{attr}")
 
-  Runner(args.rootfs[0], *args.command, env=args.env, name=args.name, passthru_args=passthru_args).run()
-  return 0
+  # Sanity check
+  if args.detach:
+    if args.tty or args.interactive:
+      raise RuntimeError("--detach is incompatible with --tty and --interactive")
+
+  runner = Runner(rootfs, *args.command, env=env, passthru_args=passthru_args)
+  return runner.run(detach=args.detach)
 
 
 if __name__ == "__main__":
