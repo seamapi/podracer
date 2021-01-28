@@ -140,6 +140,7 @@ def main(argv=sys.argv[1:]):
   parser = argparse.ArgumentParser(description='Import a container into ostree from a registry')
   parser.add_argument('ref', metavar='BRANCH', help='ostree branch to commit to')
   parser.add_argument('image', metavar='IMAGE', help='image to import')
+  parser.add_argument('--repo', metavar='OSTREE', help='ostree repo to import to')
   parser.add_argument('--arch', metavar='ARCH', help='architecture to import')
   parser.add_argument('--variant', metavar='VARIANT', help='variant to import')
   parser.add_argument('--sign-by', metavar='KEYID', help='sign commit with GPG key')
@@ -154,6 +155,9 @@ def main(argv=sys.argv[1:]):
   if args.variant is None:
     if 'PODRACER_VARIANT' in os.environ and len(os.environ['PODRACER_VARIANT']) > 0:
       args.variant = os.getenv('PODRACER_VARIANT')
+
+  if args.repo is not None:
+    os.environ['OSTREE_REPO'] = args.repo
 
   repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
 
