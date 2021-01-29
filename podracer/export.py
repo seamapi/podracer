@@ -15,13 +15,16 @@ from typing import Dict, IO, Iterable, List, Set
 
 def find_export_command() -> str:
   if os.getenv('PODRACER_EXPORT_COMMAND') is not None:
-    return os.getenv('PODRACER_EXPORT_COMMAND')
-  elif shutil.which('podman') is None:
-    return 'pdoman'
+    command = os.getenv('PODRACER_EXPORT_COMMAND')
+  elif shutil.which('podman') is not None:
+    command = 'podman'
   elif shutil.which('docker') is not None:
-    return 'docker'
+    command = 'docker'
   else:
-    raise RuntimeError("Couldn't find podman or docker; try setting PODRACER_EXPORT_COMMAND to the path of podman or docker")
+    command = None
+
+  assert command is not None, "Couldn't find podman or docker; try setting PODRACER_EXPORT_COMMAND to the correct path"
+  return command
 
 
 EXPORT_COMMAND = find_export_command()
@@ -99,7 +102,7 @@ def parent_paths(filename: str) -> Iterable[str]:
     path = path.parent
 
 
-def is_parent_masked(filename: str, mask: set) -> bool:
+def is_parent_masked(filename: str, mask: Set[str]) -> bool:
   for parent in parent_paths(filename):
     if parent in mask:
       return True
