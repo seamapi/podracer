@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from podracer.capture import capture_output, capture_json
 from podracer.export import EXPORT_COMMAND, export_rootfs
+from podracer.manifests import filter_manifests
 from podracer.ostree import ostree_rev_parse
 from podracer.registry import get_manifests, qualify_image
 
@@ -17,22 +18,7 @@ METADATA_FILENAME = '.podracer.json'
 
 def registry_manifest(image: str, arch: str, variant: str = None) -> dict:
   manifests = get_manifests(image)
-
-  def match_manifest(manifest):
-    if manifest["platform"]["os"] != "linux":
-      return False
-    elif manifest["platform"]["architecture"] != arch:
-      return False
-
-    if variant is not None:
-      if not "variant" in manifest["platform"]:
-        return False
-      elif manifest["platform"]["variant"] != variant:
-        return False
-
-    return True
-
-  matches = list(filter(match_manifest, manifests))
+  matches = list(filter_manifests(manifests, arch=arch, variant=variant, osname='linux'))
 
   if len(matches) < 1:
     raise RuntimeError("No matching manifests; are your architecture and variant correct?")
@@ -67,12 +53,12 @@ def ostree_commit(ref: str, tarball: str, metadata: dict, sign_by: str = None) -
 
 
 def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = None) -> None:
-  image = qualify_image(image)
-  metadata = registry_manifest(image, arch, variant)
-  with_digest = f"{image.rsplit(':', 1)[0]}@{metadata['digest']}"
+  qualified = qualify_image(image)
+  metadata = registry_manifest(qualified, arch, variant)
+  with_digest = f"{qualified.rsplit(':', 1)[0]}@{metadata['digest']}"
 
   if ostree_digest(ref) == metadata['digest']:
-    sys.stderr.write(f"{ref} already contains {with_digest}\n")
+    sys.stderr.write(f"NOTICE: {ref} already contains {with_digest}\n")
     print(ostree_rev_parse(ref))
     return
 
@@ -80,6 +66,7 @@ def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = 
   inspect = capture_json(EXPORT_COMMAND, 'image', 'inspect', with_digest)
 
   metadata["source"] = image
+  metadata["qualified"] = qualified
   metadata["imported"] = datetime.datetime.now().isoformat()
   metadata["config"] = inspect[0]["Config"]
 
@@ -87,7 +74,7 @@ def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = 
   try:
     export_rootfs(with_digest, tarball, inject={METADATA_FILENAME: json.dumps(metadata, indent=2)})
     commit = ostree_commit(ref, tarball.name, metadata, sign_by)
-    sys.stderr.write(f"{with_digest} imported to {ref}\n")
+    sys.stderr.write(f"SUCCESS: {with_digest} imported to {ref}\n")
     print(commit)
   finally:
     os.unlink(tarball.name)
@@ -122,8 +109,8 @@ def main(argv: list[str] = sys.argv[1:]) -> int:
     capture_output('ostree', 'refs', suppress_stderr=True)
   except subprocess.CalledProcessError:
     if args.repo is not None:
-      sys.stderr.write(f"Initializing ostree repo in {args.repo}\n")
       subprocess.run(['ostree', f"--repo={args.repo}", 'init', '--mode=archive-z2'])
+      sys.stderr.write(f"NOTICE: initializing ostree repo in {args.repo}\n")
     else:
       raise RuntimeError("Couldn't read ostree repo; try setting OSTREE_REPO or passing --repo.")
 
