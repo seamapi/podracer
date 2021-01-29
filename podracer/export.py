@@ -8,11 +8,8 @@ import sys
 import tarfile
 import tempfile
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-from io import BufferedReader, BytesIO, IOBase
+from io import BytesIO, IOBase
 from pathlib import Path
-from typing import NamedTuple
 
 if os.getenv('PODRACER_EXPORT_COMMAND') is not None:
   EXPORT_COMMAND = os.getenv('PODRACER_EXPORT_COMMAND')
