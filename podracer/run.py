@@ -7,7 +7,6 @@ import sys
 import tempfile
 
 from pathlib import Path
-from podracer.env import unpack_env
 from podracer.paths import PODRACER_RUNDIR
 from podracer.ostree import ostree_checkout
 from podracer.overlay import podracer_overlay
@@ -15,6 +14,14 @@ from podracer.poststop import poststop
 from podracer.signals import forward_signals
 
 FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
+
+
+def unpack_env(src):
+  env = {}
+  for kv in src:
+    key, value = kv.strip().split('=', 1)
+    env[key] = value
+  return env
 
 
 class Runner:
