@@ -15,6 +15,8 @@ from podracer.registry import get_manifests, qualify_image
 from typing import List, Optional
 
 METADATA_FILENAME = '.podracer.json'
+SCHEMA_KEY = 'podracer_schema'
+SCHEMA_VERSION = 1
 
 
 def registry_manifest(image: str, arch: str, variant: str = None) -> dict:
@@ -31,7 +33,16 @@ def registry_manifest(image: str, arch: str, variant: str = None) -> dict:
 
 def ostree_digest(ref: str) -> Optional[str]:
   try:
-    return capture_json('ostree', 'cat', ref, METADATA_FILENAME, suppress_stderr=True)['digest']
+    metadata = capture_json('ostree', 'cat', ref, METADATA_FILENAME, suppress_stderr=True)
+
+    if not isinstance(metadata, dict):
+      return None
+    if SCHEMA_KEY not in metadata:
+      return None
+    if metadata[SCHEMA_KEY] != SCHEMA_VERSION:
+      return None
+
+    return metadata["digest"]
   except subprocess.CalledProcessError:
     return None
 
@@ -44,7 +55,8 @@ def ostree_commit(ref: str, tarball: str, metadata: dict, sign_by: str = None) -
     f"--subject=podracer repacked {metadata['source']} at {metadata['imported']}",
     f"--add-metadata-string=com.getseam.podracer.source={metadata['source']}",
     f"--add-metadata-string=com.getseam.podracer.imported={metadata['imported']}",
-    f"--add-metadata-string=com.getseam.podracer.digest={metadata['digest']}"
+    f"--add-metadata-string=com.getseam.podracer.digest={metadata['digest']}",
+    f"--add-metadata-string=com.getseam.podracer.schema={SCHEMA_VERSION}"
   ]
 
   if sign_by is not None:
@@ -59,7 +71,7 @@ def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = 
   with_digest = f"{qualified.rsplit(':', 1)[0]}@{metadata['digest']}"
 
   if ostree_digest(ref) == metadata['digest']:
-    sys.stderr.write(f"NOTICE: {ref} already contains {with_digest}\n")
+    sys.stderr.write(f"SKIPPED: {ref} already contains {with_digest}\n")
     print(ostree_rev_parse(ref))
     return
 
@@ -70,6 +82,7 @@ def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = 
   metadata["qualified"] = qualified
   metadata["imported"] = datetime.datetime.now().isoformat()
   metadata["config"] = inspect[0]["Config"]
+  metadata[SCHEMA_KEY] = SCHEMA_VERSION
 
   tarball = tempfile.NamedTemporaryFile(suffix='.tar', delete=False)
   try:
@@ -111,7 +124,7 @@ def main(argv: List[str] = sys.argv[1:]) -> int:
   except subprocess.CalledProcessError:
     if args.repo is not None:
       subprocess.run(['ostree', f"--repo={args.repo}", 'init', '--mode=archive-z2'])
-      sys.stderr.write(f"NOTICE: initializing ostree repo in {args.repo}\n")
+      sys.stderr.write(f"NOTICE: initialized ostree repo in {args.repo}\n")
     else:
       raise RuntimeError("Couldn't read ostree repo; try setting OSTREE_REPO or passing --repo.")
 
