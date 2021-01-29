@@ -12,6 +12,7 @@ setuptools.setup(
   license='AGPL-3.0-or-later',
   entry_points = {
     'console_scripts': [
+      'podracer-export=podracer.export:main',
       'podracer-manifests=podracer.manifests:main',
       'podracer-run=podracer.run:main',
       'podracer-repack=podracer.repack:main',

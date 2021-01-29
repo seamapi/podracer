@@ -4,17 +4,19 @@ import json
 import os
 import subprocess
 import sys
-import tarfile
 import tempfile
 
 from pathlib import Path
-from podracer.container import RUNTIME
-from podracer.ostree import ostree_rev_parse
 from podracer.capture import capture_output, capture_json
+from podracer.export import EXPORT_COMMAND, export_rootfs
+from podracer.ostree import ostree_rev_parse
+from podracer.registry import get_manifests, qualify_image
+
+METADATA_FILENAME = '.podracer.json'
 
 
-def registry_manifest(image, arch, variant=None):
-  manifests = capture_json(RUNTIME, 'manifest', 'inspect', image)
+def registry_manifest(image: str, arch: str, variant: str = None) -> dict:
+  manifests = get_manifests(image)
 
   def match_manifest(manifest):
     if manifest["platform"]["os"] != "linux":
@@ -30,7 +32,7 @@ def registry_manifest(image, arch, variant=None):
 
     return True
 
-  matches = list(filter(match_manifest, manifests["manifests"]))
+  matches = list(filter(match_manifest, manifests))
 
   if len(matches) < 1:
     raise RuntimeError("No matching manifests; are your architecture and variant correct?")
@@ -40,68 +42,22 @@ def registry_manifest(image, arch, variant=None):
   return matches[0]
 
 
-def ostree_digest(ref):
+def ostree_digest(ref: str) -> str:
   try:
-    return capture_json('ostree', 'cat', ref, '.podracer.json', suppress_stderr=True)['digest']
+    return capture_json('ostree', 'cat', ref, METADATA_FILENAME, suppress_stderr=True)['digest']
   except subprocess.CalledProcessError:
     return None
 
 
-def create_tarball(image, metadata):
-  # Create a tarball to import into ostree
-  tarball = tempfile.NamedTemporaryFile(suffix='.tar', delete=False)
-  tree = tarfile.open(None, 'w', tarball)
-
-  try:
-    # Save the image and open the archive
-    archivefile = tempfile.TemporaryFile()
-    subprocess.run([RUNTIME, 'save', image], check=True, stdout=archivefile, stderr=subprocess.PIPE)
-    archivefile.seek(0)
-    archive = tarfile.open(None, 'r', archivefile)
-
-    # Extract and parse the manifest
-    manifest = json.load(archive.extractfile("manifest.json"))
-    if len(manifest) != 1:
-      raise RuntimeError(f"Expected exactly 1 image in manifest, got {len(manifest)}")
-
-    # For each layer in the manifest
-    for name in manifest[0]["Layers"]:
-      layer = tarfile.open(None, 'r', archive.extractfile(name))
-      # Copy each file in the layer into the tree
-      for member in layer.getmembers():
-        if member.size > 0:
-          tree.addfile(member, layer.extractfile(member))
-        else:
-          tree.addfile(member)
-
-    # Write the metadata
-    with tempfile.TemporaryFile(mode='w+') as tmp:
-      json.dump(metadata, tmp, indent=2)
-      tmp.seek(0)
-
-      info = tarfile.TarInfo('.podracer.json')
-      info.size = os.stat(tmp.fileno()).st_size
-      tree.addfile(info, tmp.buffer)
-
-    # Finish writing the archive
-    tree.close()
-    tarball.close()
-  except:
-    os.unlink(tarball.name)
-    raise
-
-  return tarball
-
-
-def ostree_commit(ref, tarball, metadata, sign_by=None):
+def ostree_commit(ref: str, tarball: str, metadata: dict, sign_by: str = None) -> str:
   commit_argv = [
     'ostree', 'commit', '--tar-autocreate-parents',
     f"--branch={ref}",
-    f"--tree=tar={tarball.name}",
+    f"--tree=tar={tarball}",
     f"--subject=podracer repacked {metadata['source']} at {metadata['imported']}",
-    f"--add-metadata-string=source={metadata['source']}",
-    f"--add-metadata-string=imported={metadata['imported']}",
-    f"--add-metadata-string=digest={metadata['digest']}"
+    f"--add-metadata-string=com.getseam.podracer.source={metadata['source']}",
+    f"--add-metadata-string=com.getseam.podracer.imported={metadata['imported']}",
+    f"--add-metadata-string=com.getseam.podracer.digest={metadata['digest']}"
   ]
 
   if sign_by is not None:
@@ -110,7 +66,8 @@ def ostree_commit(ref, tarball, metadata, sign_by=None):
   return capture_output(*commit_argv)
 
 
-def repack(ref, image, arch, variant=None, sign_by=None):
+def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = None) -> None:
+  image = qualify_image(image)
   metadata = registry_manifest(image, arch, variant)
   with_digest = f"{image.rsplit(':', 1)[0]}@{metadata['digest']}"
 
@@ -119,31 +76,31 @@ def repack(ref, image, arch, variant=None, sign_by=None):
     print(ostree_rev_parse(ref))
     return
 
-  capture_output(RUNTIME, 'pull', '--quiet', with_digest)
-  inspect = capture_json(RUNTIME, 'image', 'inspect', with_digest)
+  capture_output(EXPORT_COMMAND, 'pull', '--quiet', with_digest)
+  inspect = capture_json(EXPORT_COMMAND, 'image', 'inspect', with_digest)
 
   metadata["source"] = image
   metadata["imported"] = datetime.datetime.now().isoformat()
   metadata["config"] = inspect[0]["Config"]
 
-  tarball = create_tarball(with_digest, metadata)
-
+  tarball = tempfile.NamedTemporaryFile(suffix='.tar', delete=False)
   try:
-    commit = ostree_commit(ref, tarball, metadata, sign_by)
+    export_rootfs(with_digest, tarball, inject={METADATA_FILENAME: json.dumps(metadata, indent=2)})
+    commit = ostree_commit(ref, tarball.name, metadata, sign_by)
     sys.stderr.write(f"{with_digest} imported to {ref}\n")
     print(commit)
   finally:
     os.unlink(tarball.name)
 
 
-def main(argv=sys.argv[1:]):
+def main(argv: list[str] = sys.argv[1:]) -> int:
   parser = argparse.ArgumentParser(description='Import a container into ostree from a registry')
   parser.add_argument('ref', metavar='BRANCH', help='ostree branch to commit to')
   parser.add_argument('image', metavar='IMAGE', help='image to import')
   parser.add_argument('--repo', metavar='OSTREE', help='ostree repo to import to')
+  parser.add_argument('--sign-by', metavar='KEYID', help='sign commit with GPG key')
   parser.add_argument('--arch', metavar='ARCH', help='architecture to import')
   parser.add_argument('--variant', metavar='VARIANT', help='variant to import')
-  parser.add_argument('--sign-by', metavar='KEYID', help='sign commit with GPG key')
   args = parser.parse_args(argv)
 
   if args.arch is None:
@@ -169,7 +126,6 @@ def main(argv=sys.argv[1:]):
       subprocess.run(['ostree', f"--repo={args.repo}", 'init', '--mode=archive-z2'])
     else:
       raise RuntimeError("Couldn't read ostree repo; try setting OSTREE_REPO or passing --repo.")
-
 
   repack(args.ref, args.image, args.arch, args.variant, args.sign_by)
   return 0
