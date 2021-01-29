@@ -2,7 +2,7 @@ import json
 import subprocess
 import sys
 
-def capture_output(*argv, suppress_stderr=False):
+def capture_output(*argv: list[str], suppress_stderr: bool = False) -> str:
   if suppress_stderr:
     child_stderr = subprocess.PIPE
   else:
@@ -12,5 +12,5 @@ def capture_output(*argv, suppress_stderr=False):
   return child.stdout.strip()
 
 
-def capture_json(*argv, suppress_stderr=False):
+def capture_json(*argv: list[str], suppress_stderr: bool = False) -> object:
   return json.loads(capture_output(*argv, suppress_stderr=suppress_stderr))
