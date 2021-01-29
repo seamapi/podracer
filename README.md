@@ -10,10 +10,45 @@ You may want to use this if you want to use an ostree repository for container d
 
 ## Usage
 
+### `podracer-export`
+
+```text
+podracer-export [-h] [-o PATH] IMAGE
+
+Export container rootfs as tarball
+
+positional arguments:
+  IMAGE                 image to export
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o PATH, --output PATH
+                        where to write output; defaults to stdout
+```
+
+### `podracer-manifests`
+
+```text
+podracer-manifests [-h] [--arch ARCH] [--os OS] [--variant VARIANT] [--output yaml|json|digests] IMAGE
+
+Inspect registry manifests
+
+positional arguments:
+  IMAGE                 image to inspect
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --arch ARCH           filter by architecture
+  --os OS               filter by OS
+  --variant VARIANT     filter by variant
+  --output yaml|json|digests
+                        output format; "digests" prints one digest per line
+```
+
 ### `podracer-repack`
 
 ```text
-podracer-repack [-h] [--arch ARCH] [--variant VARIANT] [--sign-by KEYID] BRANCH IMAGE
+podracer-repack [-h] [--repo OSTREE] [--sign-by KEYID] [--arch ARCH] [--variant VARIANT] BRANCH IMAGE
 
 Import a container into ostree from a registry
 
@@ -24,17 +59,17 @@ positional arguments:
 optional arguments:
   -h, --help         show this help message and exit
   --repo OSTREE      ostree repo to import to
+  --sign-by KEYID    sign commit with GPG key
   --arch ARCH        architecture to import
   --variant VARIANT  variant to import
-  --sign-by KEYID    sign commit with GPG key
 ```
 
 ### `podracer-run`
 
 ```text
-podracer-run [-h] [--cidfile PATH] [--cgroups enabled|disabled|no-conmon|split] [--conmon-pidfile PATH] [-d] [-e KEY=VALUE] [--env-file FILE] [-i] [-n NAME] [--network NETWORK] [--no-ostree] [--replace] [--rm] [-t]
-              [-v VOLUME]
-              ROOTFS [CMD [CMD ...]]
+podracer-run [-h] [--cidfile PATH] [--cgroups enabled|disabled|no-conmon|split] [--conmon-pidfile PATH] [-d] [--entrypoint ENTRYPOINT] [-e KEY=VALUE] [--env-file FILE] [-i] [-n NAME] [--network NETWORK] [--no-ostree]
+              [--replace] [--rm] [-t] [-v VOLUME]
+              ROOTFS [CMD ...]
 
 Run a container from a rootfs or an ostree commit
 
@@ -50,6 +85,8 @@ optional arguments:
   --conmon-pidfile PATH
                         path to the file that will receive the PID of conmon
   -d, --detach          run container in background and print container ID
+  --entrypoint ENTRYPOINT
+                        overwrite the default ENTRYPOINT of the image
   -e KEY=VALUE, --env KEY=VALUE
                         add or override a container environment variable
   --env-file FILE       read environment variables from a file
