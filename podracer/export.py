@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, IO, Iterable, List, Set
 
 
-def find_export_command():
+def find_export_command() -> str:
   if os.getenv('PODRACER_EXPORT_COMMAND') is not None:
     return os.getenv('PODRACER_EXPORT_COMMAND')
   elif shutil.which('podman') is None:
