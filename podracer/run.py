@@ -7,6 +7,7 @@ import sys
 import tempfile
 
 from pathlib import Path
+from typing import Dict, Iterable, List
 from podracer.paths import PODRACER_RUNDIR
 from podracer.ostree import ostree_checkout
 from podracer.overlay import podracer_overlay
@@ -16,7 +17,7 @@ from podracer.signals import forward_signals
 FORWARD_SIGNALS = [signal.SIGHUP, signal.SIGINT, signal.SIGQUIT, signal.SIGTERM]
 
 
-def unpack_env(src):
+def unpack_env(src: Iterable) -> Dict[str, str]:
   env = {}
   for kv in src:
     key, value = kv.strip().split('=', 1)
@@ -25,12 +26,11 @@ def unpack_env(src):
 
 
 class Runner:
-  def __init__(self, rootfs, *command, entrypoint=None, env={}, passthru_args=[]):
-    rootfs = Path(rootfs)
-    if not rootfs.is_dir():
+  def __init__(self, rootfs: str, *command: str, entrypoint: List[str], env: Dict[str, str] = {}, passthru_args: List[str] = []):
+    self.rootfs = Path(rootfs)
+    if not self.rootfs.is_dir():
       raise RuntimeError(f"rootfs {rootfs} is not a directory")
 
-    self.rootfs = rootfs
     self.passthru_args = passthru_args
     self.working_dir = None
     self.user = None
@@ -45,16 +45,15 @@ class Runner:
     if len(command) > 0:
       self.command = list(command)
     elif len(self.command) < 1:
-      if os.access(rootfs.joinpath('bin/bash'), os.X_OK):
+      if os.access(self.rootfs.joinpath('bin/bash'), os.X_OK):
         self.command = ['/bin/bash']
-      elif os.access(rootfs.joinpath('bin/sh'), os.X_OK):
+      elif os.access(self.rootfs.joinpath('bin/sh'), os.X_OK):
         self.command = ['/bin/sh']
 
     self.env.update(env)
-    self.child = None
 
 
-  def load_config(self):
+  def load_config(self) -> None:
     config_path = self.rootfs.joinpath('.podracer.json')
 
     if not config_path.is_file():
@@ -79,7 +78,7 @@ class Runner:
       self.command = config['Cmd']
 
 
-  def podman_args(self):
+  def podman_args(self) -> List[str]:
     args = []
 
     if self.working_dir is not None:
@@ -94,20 +93,20 @@ class Runner:
     return args + self.passthru_args + ['--rootfs', str(self.rootfs)] + self.command
 
 
-  def send_signal(self, signum):
-    if self.child is None:
-      return None
-    return self.child.send_signal(signum)
+  def send_signal(self, signum: signal.Signals) -> None:
+    if hasattr(self, 'child'):
+      return
+    self.child.send_signal(signum)
 
 
-  def run(self, overlay=True, detach=False):
+  def run(self, overlay: bool = True, detach: bool = False) -> int:
     PODRACER_RUNDIR.mkdir(mode=0o755, parents=True, exist_ok=True)
     rundir = Path(tempfile.mkdtemp(dir=PODRACER_RUNDIR))
 
     try:
       if overlay:
         self.rootfs, hooks = podracer_overlay(rundir, self.rootfs)
-        self.passthru_args += ['--hooks-dir', hooks]
+        self.passthru_args += ['--hooks-dir', str(hooks)]
 
       if detach:
         self.passthru_args.append('--detach')
@@ -129,7 +128,7 @@ class Runner:
     return self.child.returncode
 
 
-def main(argv=sys.argv[1:]):
+def main(argv: List[str] = sys.argv[1:]) -> int:
   # Not quite as many arguments as Thanksgiving
   parser = argparse.ArgumentParser(description='Run a container from a rootfs or an ostree commit')
   parser.add_argument('rootfs', metavar='ROOTFS', nargs=1, help='ostree reference of rootfs, or path if --no-ostree given')

@@ -1,12 +1,12 @@
 import argparse
 import json
 import sys
-from typing import Iterable
+from typing import Iterable, List
 
 from podracer.registry import get_manifests
 
 
-def filter_manifests(manifests: list[dict], arch: str = None, osname: str = None, variant: str = None) -> Iterable[dict]:
+def filter_manifests(manifests: List[dict], arch: str = None, osname: str = None, variant: str = None) -> Iterable[dict]:
   for manifest in manifests:
     if arch is not None:
       if manifest['platform']['architecture'] != arch:
@@ -25,7 +25,7 @@ def filter_manifests(manifests: list[dict], arch: str = None, osname: str = None
     yield manifest
 
 
-def main(argv: list[str] = sys.argv[1:]) -> int:
+def main(argv: List[str] = sys.argv[1:]) -> int:
   parser = argparse.ArgumentParser(description='Inspect registry manifests')
   parser.add_argument('image', metavar='IMAGE', help='image to inspect')
   parser.add_argument('--arch', metavar='ARCH', help='filter by architecture')

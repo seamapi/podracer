@@ -1,7 +1,9 @@
 import json
 import os
 
+from http.client import HTTPResponse
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 from urllib.error import HTTPError
 from urllib.parse import urlencode, urljoin, urlparse
 from urllib.request import Request, urlopen
@@ -13,7 +15,7 @@ IMAGE_TYPE = 'application/vnd.docker.container.image.v1+json'
 DOCKERHUB_ALIASES = ['docker.io', 'registry-1.docker.io', 'https://index.docker.io/v1/']
 
 
-def qualify_image(image):
+def qualify_image(image: str) -> str:
   if len(image.split('/')) < 2:
     image = 'library/' + image
 
@@ -26,7 +28,7 @@ def qualify_image(image):
   return image
 
 
-def find_credentials(registry, auth):
+def find_credentials(registry: str, auth: dict) -> Optional[str]:
   if 'auths' not in auth:
     return None
 
@@ -40,7 +42,7 @@ def find_credentials(registry, auth):
   return None
 
 
-def registry_credentials(registry):
+def registry_credentials(registry: str) -> Optional[str]:
   # See if we've logged in with podman or skopeo
   if 'XDG_RUNTIME_DIR' in os.environ:
     containers_auth = Path(os.environ['XDG_RUNTIME_DIR']).joinpath(f"{os.getuid()}/containers/auth/json")
@@ -62,15 +64,13 @@ def registry_credentials(registry):
   return None
 
 
-def registry_request(url, headers={}, token=None, method='GET'):
+def registry_request(url: str, headers: Dict[str, str] = {}, token: str = None, method: str = 'GET') -> Tuple[HTTPResponse, Optional[str]]:
   try:
     if token is not None:
       headers['Authorization'] = f"Bearer {token}"
 
     response = urlopen(Request(url, headers=headers, method=method))
-    setattr(response, 'token', token)
-
-    return response
+    return response, token
   except HTTPError as error:
     if (error.code != 401) or (token is not None):
       raise
@@ -111,7 +111,7 @@ def registry_request(url, headers={}, token=None, method='GET'):
     return registry_request(url, headers, auth['token'], method)
 
 
-def get_manifests(image):
+def get_manifests(image: str) -> List[dict]:
   image = qualify_image(image)
   base_url, image = image.split('/', 1)
   repository, tag = image.split(':', 1)
@@ -122,7 +122,7 @@ def get_manifests(image):
   url = f"https://{base_url}/v2/{repository}/manifests/{tag}"
   headers = {"Accept": f"{MANIFEST_LIST_TYPE}, {MANIFEST_V2_TYPE}"}
 
-  response = registry_request(url, headers)
+  response, token = registry_request(url, headers)
   body = json.load(response)
   response.close()
 
@@ -141,7 +141,7 @@ def get_manifests(image):
     url = f"https://{base_url}/v2/{repository}/blobs/{body['config']['digest']}"
     headers = {"Accept": IMAGE_TYPE}
 
-    response = registry_request(url, headers, response.token)
+    response, token = registry_request(url, headers, token)
     body = json.load(response)
     response.close()
 

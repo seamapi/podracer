@@ -12,6 +12,7 @@ from podracer.export import EXPORT_COMMAND, export_rootfs
 from podracer.manifests import filter_manifests
 from podracer.ostree import ostree_rev_parse
 from podracer.registry import get_manifests, qualify_image
+from typing import List, Optional
 
 METADATA_FILENAME = '.podracer.json'
 
@@ -28,7 +29,7 @@ def registry_manifest(image: str, arch: str, variant: str = None) -> dict:
   return matches[0]
 
 
-def ostree_digest(ref: str) -> str:
+def ostree_digest(ref: str) -> Optional[str]:
   try:
     return capture_json('ostree', 'cat', ref, METADATA_FILENAME, suppress_stderr=True)['digest']
   except subprocess.CalledProcessError:
@@ -80,7 +81,7 @@ def repack(ref: str, image: str, arch: str, variant: str = None, sign_by: str = 
     os.unlink(tarball.name)
 
 
-def main(argv: list[str] = sys.argv[1:]) -> int:
+def main(argv: List[str] = sys.argv[1:]) -> int:
   parser = argparse.ArgumentParser(description='Import a container into ostree from a registry')
   parser.add_argument('ref', metavar='BRANCH', help='ostree branch to commit to')
   parser.add_argument('image', metavar='IMAGE', help='image to import')

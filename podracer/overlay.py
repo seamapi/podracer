@@ -5,12 +5,13 @@ import subprocess
 import tempfile
 
 from pathlib import Path
+from typing import Tuple
 from podracer.poststop import generate_hook
 
 PODRACER_RUNDIR = Path(os.environ.get('PODRACER_RUNDIR', '/run/podracer'))
 
 
-def podracer_overlay(rundir, rootfs):
+def podracer_overlay(rundir: Path, rootfs: Path) -> Tuple[Path, Path]:
   upperdir = rundir.joinpath('upperdir')
   upperdir.mkdir(mode=0o755, parents=True, exist_ok=True)
 

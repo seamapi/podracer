@@ -10,19 +10,25 @@ import tempfile
 
 from io import BytesIO, IOBase
 from pathlib import Path
+from typing import Dict, IO, Iterable, List, Set
 
-if os.getenv('PODRACER_EXPORT_COMMAND') is not None:
-  EXPORT_COMMAND = os.getenv('PODRACER_EXPORT_COMMAND')
-elif shutil.which('podman') is not None:
-  EXPORT_COMMAND = 'podman'
-elif shutil.which('docker') is not None:
-  EXPORT_COMMAND = 'docker'
-else:
-  raise RuntimeError("Couldn't find podman or docker; try setting PODRACER_EXPORT_COMMAND to the path of podman or docker")
+
+def find_export_command():
+  if os.getenv('PODRACER_EXPORT_COMMAND') is not None:
+    return os.getenv('PODRACER_EXPORT_COMMAND')
+  elif shutil.which('podman') is None:
+    return 'pdoman'
+  elif shutil.which('docker') is not None:
+    return 'docker'
+  else:
+    raise RuntimeError("Couldn't find podman or docker; try setting PODRACER_EXPORT_COMMAND to the path of podman or docker")
+
+
+EXPORT_COMMAND = find_export_command()
 
 
 class Archive:
-  def __init__(self, buffer: IOBase):
+  def __init__(self, buffer: IO[bytes]):
     self.buffer = buffer
     self.archive = tarfile.open(mode='r', fileobj=self.buffer)
 
@@ -34,7 +40,11 @@ class Archive:
 
 class Layer(Archive):
   def __init__(self, archive: tarfile.TarFile, name: str):
-    super().__init__(archive.extractfile(name))
+    buffer = archive.extractfile(name)
+    if buffer is None:
+      raise RuntimeError("No buffer for layer")
+
+    super().__init__(buffer)
 
     self.name = name
     self.files = set()
@@ -71,14 +81,18 @@ class Image(Archive):
     buffer.seek(0)
     super().__init__(buffer)
 
-    manifest = json.load(self.archive.extractfile("manifest.json"))
+    manifest_buffer = self.archive.extractfile("manifest.json")
+    if manifest_buffer is None:
+      raise RuntimeError("No buffer for manifest")
+
+    manifest = json.load(manifest_buffer)
     if len(manifest) != 1:
       raise RuntimeError(f"Expected exactly 1 image in manifest, got {len(manifest)}")
 
     self.layers = list(map(lambda name: Layer(self.archive, name), manifest[0]["Layers"]))
 
 
-def parent_paths(filename: str) -> list[str]:
+def parent_paths(filename: str) -> Iterable[str]:
   path = Path(filename)
   while len(path.parent.name) > 0:
     yield str(path.parent) + '/'
@@ -99,10 +113,10 @@ def make_buffer(content: str) -> BytesIO:
   return buffer
 
 
-def export_rootfs(image_name: str, output: IOBase, inject: dict[str] = {}) -> None:
+def export_rootfs(image_name: str, output: IO[bytes], inject: Dict[str, str] = {}) -> None:
   image = Image(image_name)
-  mask = set()
-  files = {}
+  mask: Set[str] = set()
+  files: Dict[str, Layer] = {}
 
   # Build the list of files
   for layer in reversed(image.layers):
@@ -143,7 +157,7 @@ def export_rootfs(image_name: str, output: IOBase, inject: dict[str] = {}) -> No
     output.close()
 
 
-def main(argv: list[str] = sys.argv[1:]) -> int:
+def main(argv: List[str] = sys.argv[1:]) -> int:
   parser = argparse.ArgumentParser(description='Export container rootfs as tarball')
   parser.add_argument('image', metavar='IMAGE', help='image to export')
   parser.add_argument('-o', '--output', metavar='PATH', help='where to write output; defaults to stdout')
