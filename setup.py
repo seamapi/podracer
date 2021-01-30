@@ -2,10 +2,10 @@ import setuptools
 
 setuptools.setup(
   name="podracer",
-  version="0.9.0",
+  version="0.9.1",
   author="Seam",
   author_email="hello@getseam.com",
-  description="Tool to run repacked containers",
+  description=" A wrapper around podman to launch a container stored in an ostree repository",
   url="https://github.com/hello-seam/podracer",
   packages=['podracer'],
   python_requires='>=3.8',
