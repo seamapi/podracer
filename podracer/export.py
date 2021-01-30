@@ -126,9 +126,10 @@ def export_rootfs(image_name: str, output: IO[bytes], inject: Dict[str, str] = {
     for filename in layer.files:
       if filename in mask:
         continue
-      elif filename in files:
-        raise RuntimeError(f"{filename} from {layer.name} conflicts with {files[filename].name}")
-      elif is_parent_masked(filename, mask):
+
+      assert filename not in files, f"{filename} from {layer.name} conflicts with {files[filename].name}"
+
+      if is_parent_masked(filename, mask):
         continue
 
       # Take this file from this layer
@@ -137,6 +138,10 @@ def export_rootfs(image_name: str, output: IO[bytes], inject: Dict[str, str] = {
     # Grow the mask
     mask.update(layer.mask)
     mask.update(layer.files)
+
+    # '.wh..wh..opq' in root, skip all remaining layers
+    if '' in mask:
+      break
 
   # Write the exported rootfs
   with tarfile.open(mode='w', fileobj=output) as tarball:
