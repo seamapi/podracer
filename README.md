@@ -1,5 +1,10 @@
 # podracer
 
+## ABANDONED
+
+⚠️ We have **ABANDONED** this approach in favor of [precompose](https://github.com/hello-seam/precompose). There will be no further updates to this repository. It remains archived for posterity / reference. ⚠️
+
+## Summary
 podracer includes a tool to import a container from a registry into an [ostree](https://ostreedev.github.io/ostree/) repository, and wrapper around [podman](https://podman.io/) to launch a container stored in a ostree repository (or just a directory, if you only want a glorified [chroot(1)](https://man7.org/linux/man-pages/man1/chroot.1.html).)
 
 You may want to use this if you want to use an ostree repository for container distribution instead of a registry. The benefits of doing so include:
